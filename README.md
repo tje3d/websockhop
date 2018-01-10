@@ -28,7 +28,7 @@ Installation
 For use in a browser script tag, clone this repository and build it:
 
 ```
-git clone https://github.com/fanout/websockhop.git
+git clone https://github.com/tje3d/websockhop.git
 cd websockhop
 npm install
 npm run build
@@ -39,7 +39,7 @@ The resulting file will be available at `dist/websockhop.js` (and `dist/websockh
 or get the npm package:
 
 ```
-npm install websockhop
+npm install tje3d-websockhop
 ```
 
 The file will be available at `node_modules/websockhop/dist/websockhop.js` (and `node_modules/websockhop/dist/websockhop.min.js` for a minified version).

@@ -1,6 +1,6 @@
 {
   "name": "tje3d-websockhop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Convenience library for WebSocket that provides automatic reconnect, request/response interactions",
   "main": "lib/index.js",
   "files": [
@@ -10,10 +10,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fanout/websockhop.git"
+    "url": "git+https://github.com/tje3d/websockhop.git"
   },
   "bugs": {
-    "url": "https://github.com/fanout/websockhop/issues"
+    "url": "https://github.com/tje3d/websockhop/issues"
   },
   "keywords": [
     "realtime",
