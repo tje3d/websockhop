@@ -204,43 +204,44 @@ class WebSockHop {
         this._events.off(type, ...args);
     }
     request(obj, callback, errorCallback, timeoutMsecs, disconnectOnTimeout) {
-        const request = {
-            obj,
-            requestTimeoutTimer: null,
-            requestTimeoutMsecs: typeof timeoutMsecs !== 'undefined' ? timeoutMsecs : this.defaultRequestTimeoutMsecs,
-            requestDisconnectOnTimeout: typeof disconnectOnTimeout !== 'undefined' ? disconnectOnTimeout : this.defaultDisconnectOnRequestTimeout,
-            clearTimeout() {
-                if (this.requestTimeoutTimer != null) {
-                    clearTimeout(this.requestTimeoutTimer);
-                    this.requestTimeoutTimer = null;
+        return new Promise(function(resolve, reject){
+            const request = {
+                obj,
+                requestTimeoutTimer: null,
+                requestTimeoutMsecs: typeof timeoutMsecs !== 'undefined' ? timeoutMsecs : this.defaultRequestTimeoutMsecs,
+                requestDisconnectOnTimeout: typeof disconnectOnTimeout !== 'undefined' ? disconnectOnTimeout : this.defaultDisconnectOnRequestTimeout,
+                clearTimeout() {
+                    if (this.requestTimeoutTimer != null) {
+                        clearTimeout(this.requestTimeoutTimer);
+                        this.requestTimeoutTimer = null;
+                    }
                 }
-            }
-        };
+            };
 
-        this.formatter.trackRequest(obj, {
-            callback(o) {
-                request.clearTimeout();
-                if (callback != null) {
-                    callback(o);
+            this.formatter.trackRequest(obj, {
+                callback(o) {
+                    request.clearTimeout();
+                    if (callback != null) {
+                        callback(o);
+                    }
+                    resolve(o);
+                },
+                errorCallback(err) {
+                    if (errorCallback != null) {
+                        errorCallback(err);
+                    }
+                    reject(err);
                 }
-            },
-            errorCallback(err) {
-                if (errorCallback != null) {
-                    errorCallback(err);
-                }
+            });
+
+            this.send(obj);
+
+            if (request.requestTimeoutMsecs > 0) {
+                this._startRequestTimeout(request, reject);
             }
         });
-        this.send(obj);
-        if (request.requestTimeoutMsecs > 0) {
-
-            this._startRequestTimeout(request);
-
-        }
-
-        return request;
     }
-    _startRequestTimeout(request) {
-
+    _startRequestTimeout(request, reject) {
         const { obj: { id } } = request;
         request.clearTimeout();
         request.requestTimeoutTimer = setTimeout(async () => {
@@ -249,8 +250,8 @@ class WebSockHop {
             if (request.requestDisconnectOnTimeout) {
                 await this._raiseErrorEvent(false);
             }
+            reject('timeout');
         }, request.requestTimeoutMsecs);
-
     }
 
     async _dispatchMessage(message) {
