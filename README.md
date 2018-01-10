@@ -132,9 +132,10 @@ wsh.on('opened', function () {
   console.log('connected');
 
   // we're connected, send a test request
-  wsh.request({hello: 'world'}, function (response) {
-    console.log('got response');
-  });
+  wsh.request({hello: 'world'})
+    .then((res)=>{})
+    .catch((err)=>{})
+    .finally(()=>{})
 });
 ```
 
@@ -154,12 +155,15 @@ wsh.formatter = new WebSockHop.JsonFormatter();
 
 wsh.on('opened'), function () {
   // connect
-  wsh.request({msg: 'connect', version: 'pre2',"support":["pre2"]}, function (reply) {
-    // set up subscription
-    wsh.request({msg: 'sub', name: 'all-players', params: []}, function (reply) {
-      console.log('subscription success');
-    });
-  });
+  wsh.request({msg: 'connect', version: 'pre2',"support":["pre2"]})
+    .then((res)=>{
+      wsh.request({msg: 'sub', name: 'all-players', params: []})
+        .then((res)=>{})
+        .catch((err)=>{})
+        .finally(()=>{})
+    })
+    .catch((err)=>{})
+    .finally(()=>{})
 });
 
 wsh.on('message', function (message) {
