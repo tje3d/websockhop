@@ -1,6 +1,6 @@
 {
   "name": "tje3d-websockhop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Convenience library for WebSocket that provides automatic reconnect, request/response interactions",
   "main": "lib/index.js",
   "files": [

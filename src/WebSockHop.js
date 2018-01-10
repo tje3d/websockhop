@@ -204,7 +204,7 @@ class WebSockHop {
         this._events.off(type, ...args);
     }
     request(obj, callback, errorCallback, timeoutMsecs, disconnectOnTimeout) {
-        return new Promise(function(resolve, reject){
+        return new Promise((resolve, reject) => {
             const request = {
                 obj,
                 requestTimeoutTimer: null,
