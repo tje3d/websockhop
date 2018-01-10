@@ -3,7 +3,7 @@ WebSockHop
 Author: Katsuyuki Ohmuro <harmony7@pex2.jp>  
 Mailing List: http://lists.fanout.io/mailman/listinfo/fanout-users
 
-WebSockHop is a convenience library for WebSocket clients that provides automatic reconnect, periodic pinging, and request/response interactions. This is the kind of core functionality that every WebSocket application needs, isolated into a reusable library. The name comes from "sock hop", a type of dance.
+WebSockHop is a convenience library for WebSocket clients that provides automatic reconnect and request/response interactions. This is the kind of core functionality that every WebSocket application needs, isolated into a reusable library. The name comes from "sock hop", a type of dance.
 
 The project is inspired by https://github.com/joewalnes/reconnecting-websocket and taken further.
 
@@ -16,7 +16,6 @@ Features
 --------
 
   * Automatic reconnect. WebSockHop tries its best to maintain a connection. If it fails to connect or gets disconnected, it will retry connecting on an interval, with exponentially increasing delays between attempts.
-  * Periodic pinging. WebSockHop can periodically send pings to the server, and fail the connection if a pong is not received after a timeout. This helps keep the connection fresh and resilient to network failures.
   * Request/response interactions. WebSockHop can optionally associate incoming and outgoing messages, useful when making requests to a server.
   * Browser workarounds. This library includes consideration for the various issues Arnout Kazemier discusses in his "WebSuckets" presentation. https://speakerdeck.com/3rdeden/websuckets
   * Ability to substitute the underlying socket object. This can be handy if you want to use WebSockHop with SockJS or Engine.IO. Note: for Engine.IO you'll need [engine.io-as-websocket](https://github.com/fanout/engine.io-as-websocket).
@@ -103,7 +102,7 @@ Formatters
 ----------
 
 Formatters are a way to handle the data being sent and received. They convert the messages into usable data formats for your application.
-They may also be used for request tracking and ping handling. See the following sections and formatters.js in the source for more details.
+They may also be used for request tracking. See the following sections and formatters.js in the source for more details.
 
 If no formatter is specified, then StringFormatter is automatically constructed and used.
 
@@ -139,60 +138,10 @@ wsh.on('opened', function () {
 });
 ```
 
-Pings
------
-
-For additional durability, pings should be enabled. Pings allow WebSockHop to detect connection unresponsiveness quickly so that it may forcibly reconnect. Ping behavior is dependent on the formatter being used. Use with StringFormatter and JsonFormatter are described below. Special-purpose formatters may not require any setup for pings.
-
-Suppose you're using StringFormatter, and you want the client and the server to be able to ping each other by sending the string "ping" and replying with the string "pong":
-
-```javascript
-wsh.formatter = new WebSockHop.StringFormatter();
-
-// the message to periodically send
-wsh.formatter.pingMessage = 'ping';
-
-// incoming messages to eat because they are considered responses to a ping
-wsh.formatter.handlePong = function (message) {
-  return (message == 'pong'); // return true if message was a pong
-};
-
-// code to handle incoming pings
-wsh.formatter.handlePing = function (message) {
-  if (message == 'ping') {
-    wsh.send('pong');
-    return true; // message was a ping, and we've handled it
-  } else {
-    return false; // message wasn't a ping. continue processing the message normally
-  }
-};
-```
-
-If handlePong is null, then any incoming message will count as a pong, and the message will be processed normally as well (not eaten). If handlePing is null, then there will be no special handling for incoming pings.
-
-It is possible to use a request/response interaction for pinging instead of plain messages. In this case, handlePong is not used, and instead ping responses will be matched to requests using the formatter's normal behavior. This will only work with formatters that support requests, such as JsonFormatter. Suppose you want to send requests of {type: 'ping'} for pings:
-
-```javascript
-wsh.formatter = new WebSockHop.JsonFormatter();
-
-// the request to periodically send
-wsh.formatter.pingRequest = {type: 'ping'};
-
-// code to handle incoming pings
-wsh.formatter.handlePing = function (message) {
-  if (message.type == 'ping') {
-    wsh.send({id: message.id});
-    return true; // message was a ping, and we've handled it
-  } else {
-    return false; // message wasn't a ping. continue processing the message normally
-  }
-};
-```
-
 Examples
 --------
 
-Here's how to connect to a Meteor server using the DDP protocol and SockJS. The code tries its best to maintain a subscription at all times and it uses pings to detect for unresponsive connections quickly.
+Here's how to connect to a Meteor server using the DDP protocol and SockJS. The code tries its best to maintain a subscription at all times.
 
 ```javascript
 var wsh = new WebSockHop('http://localhost:3000', {
@@ -202,19 +151,6 @@ var wsh = new WebSockHop('http://localhost:3000', {
 });
 
 wsh.formatter = new WebSockHop.JsonFormatter();
-
-// the request to periodically send
-wsh.formatter.pingRequest = {msg: 'ping'};
-
-// code to handle incoming pings
-wsh.formatter.handlePing = function (message) {
-  if (message.msg == 'ping') {
-    wsh.send({id: message.id});
-    return true;
-  } else {
-    return false;
-  }
-};
 
 wsh.on('opened'), function () {
   // connect

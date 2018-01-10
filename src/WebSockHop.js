@@ -49,12 +49,6 @@ class WebSockHop {
 
         this.connectionTimeoutMsecs = 10000; // 10 seconds default connection timeout
 
-        this._pingTimer = null;
-        this._lastSentPing = null;
-        this._lastReceivedPongId = 0;
-        this.pingIntervalMsecs = 60000; // 60 seconds default ping timeout
-        this.pingResponseTimeoutMsecs = 10000; // 10 seconds default ping response timeout
-
         this.defaultRequestTimeoutMsecs = null; // Unless specified, request() calls use this value for timeout
         this.defaultDisconnectOnRequestTimeout = false; // If specified, request "timeout" events will handle as though socket was dropped
 
@@ -78,6 +72,7 @@ class WebSockHop {
             }, delay);
         }
     }
+
     _abortConnect() {
         if (this._timer) {
             clearTimeout(this._timer);
@@ -85,11 +80,13 @@ class WebSockHop {
         }
         this._aborted = true;
     }
+
     async _raiseEvent(event, ...args) {
         WebSockHop.log("info", `${event} event start`);
         await this._events.trigger(event, ...args);
         WebSockHop.log("info", `${event} event end`);
     }
+
     async _start() {
         if (this.formatter == null) {
             WebSockHop.log("info", "No message formatter had been specified, creating a StringFormatter instance as formatter.");
@@ -120,7 +117,6 @@ class WebSockHop {
                 this.protocol = this.socket.protocol;
                 this._tries = 0;
                 await this._raiseEvent("opened");
-                this._resetPingTimer();
             };
             this.socket.onclose = ({wasClean, code}) => {
                 WebSockHop.log("info", `WebSocket::onclose { wasClean: ${wasClean ? "true" : "false"}, code: ${code} }`);
@@ -137,7 +133,6 @@ class WebSockHop {
                         this._raiseErrorEvent(closing);
                     });
                 }
-                this._clearPingTimers();
             };
             this.socket.onmessage = ({data}) => {
                 nextUpdate(() => {
@@ -147,6 +142,7 @@ class WebSockHop {
             };
         }
     }
+    
     async _raiseErrorEvent(isClosing) {
         const willRetry = !isClosing;
         await this._raiseEvent("error", willRetry);
@@ -165,53 +161,12 @@ class WebSockHop {
     }
     // Clear the current this.socket and all state dependent on it.
     _clearSocket() {
-        this._lastSentPing = null;
-        this._lastReceivedPongId = 0;
         this.socket.onclose = () => WebSockHop.log("info", "closed old socket that had been cleared()");
         this.socket.onmessage = null;
         this.socket.onerror = (error) => WebSockHop.log("info", "error in old socket that had been cleared()", error);;
         this.socket.close();
         this.protocol = null;
         this.socket = null;
-    }
-    _clearPingTimers() {
-        WebSockHop.log("info", "clearing ping timers.");
-        if (this._pingTimer) {
-            clearTimeout(this._pingTimer);
-            this._pingTimer = null;
-        }
-    }
-    _resetPingTimer() {
-        WebSockHop.log("info", "resetting ping timer.");
-        this._clearPingTimers();
-        this._pingTimer = setTimeout(() => {
-            this.sendPingRequest();
-        }, this.pingIntervalMsecs);
-        WebSockHop.log("info", `attempting ping in ${this.pingIntervalMsecs} ms`);
-    }
-    sendPingRequest() {
-        if (this.formatter != null) {
-            const { pingRequest, pingMessage } = this.formatter;
-
-            if (isObject(pingRequest)) {
-                const ping = Object.assign({}, pingRequest);
-                this._lastSentPing = this.request(ping, obj => {
-                    this._lastReceivedPongId = obj.id;
-                }, error => {
-                    if (error.type == ErrorEnumValue.Timeout) {
-                        WebSockHop.log("info", "no ping response, handling as disconnected");
-                    }
-                }, this.pingResponseTimeoutMsecs, true);
-                WebSockHop.log("info", `> PING [${ping.id}], requiring response in ${this.pingResponseTimeoutMsecs} ms`);
-            } else if (pingMessage != null) {
-                this._lastSentPing = this._sendPingMessage(pingMessage, this.pingResponseTimeoutMsecs);
-                WebSockHop.log("info", `> PING, requiring response in ${this.pingResponseTimeoutMsecs} ms`);
-            } else {
-                WebSockHop.log("info", "No ping set up for message formatter, not performing ping.");
-            }
-        } else {
-            WebSockHop.log("info", "Time for ping, but no formatter selected, not performing ping.");
-        }
     }
     send(obj) {
         if (this.socket) {
@@ -225,7 +180,6 @@ class WebSockHop {
             this.socket.close();
         } else {
             this._abortConnect();
-            this._clearPingTimers();
             nextUpdate(() => {
                 this._raiseErrorEvent(true);
             });
@@ -234,9 +188,6 @@ class WebSockHop {
     abort() {
         if (this.socket) {
             WebSockHop.log("warn", "abort() called on live socket, performing forceful shutdown.  Did you mean to call close() ?");
-            this._clearPingTimers();
-            this._lastSentPing = null;
-            this._lastReceivedPongId = 0;
             this.socket.onclose = null;
             this.socket.onmessage = null;
             this.socket.onerror = null;
@@ -301,116 +252,25 @@ class WebSockHop {
         }, request.requestTimeoutMsecs);
 
     }
-    _sendPingMessage(message, timeoutMsecs) {
-        const pingMessage = {
-            obj: message,
-            messageTimeoutTimer: null,
-            messageTimeoutMsecs: typeof timeoutMsecs !== 'undefined' ? timeoutMsecs : this.defaultRequestTimeoutMsecs,
-            clearTimeout() {
-                if (this.messageTimeoutTimer != null) {
-                    clearTimeout(this.messageTimeoutTimer);
-                    this.messageTimeoutTimer = null;
-                }
-            }
-        };
-        this.send(message);
-        if (pingMessage.messageTimeoutMsecs > 0) {
-            this._startPingMessageTimeout(pingMessage);
-        }
-        return pingMessage;
-    }
-    _startPingMessageTimeout(pingMessage) {
 
-        pingMessage.clearTimeout();
-        pingMessage.messageTimeoutTimer = setTimeout(() => {
-            WebSockHop.log("info", "timeout exceeded");
-            this._raiseErrorEvent(false);
-        }, pingMessage.messageTimeoutMsecs);
-
-    }
     async _dispatchMessage(message) {
         let isHandled = false;
-        const obj = this.formatter.fromMessage(message);
+        const obj     = this.formatter.fromMessage(message);
+
         if (this.formatter != null) {
-            let isPong = false;
-            let pongId = 0;
-            
-            const { pingRequest, pingMessage } = this.formatter;
+            const handler = isObject(obj) ? this.formatter.getHandlerForResponse(obj) : null;
 
-            if (isObject(pingRequest)) {
-
-                // Check for request-based ping response
-
-                // See if this object is a response to a request().
-                const handler = isObject(obj) ? this.formatter.getHandlerForResponse(obj) : null;
-                if (handler != null) {
-                    await Promise.resolve(handler.callback(obj));
-                    if (this._lastSentPing != null &&
-                        this._lastSentPing.obj != null &&
-                        this._lastSentPing.obj.id == this._lastReceivedPongId
-                    ) {
-                        this._lastSentPing = null;
-                        this._lastReceivedPongId = 0;
-                        isPong = true;
-                        pongId = obj.id;
-                    }
-                    isHandled = true;
-                }
-
-                // If this is NOT a pong then just extend the response timer, if any
-                if (!isPong && this._lastSentPing != null) {
-                    WebSockHop.log("info", "Non-pong received during pong response period, extending delay...");
-                    this._startRequestTimeout(this._lastSentPing);
-                }
-
-            } else if (pingMessage != null) {
-
-                // Check for message-based ping response
-
-                if (isFunction(this.formatter.handlePong)) {
-                    isPong = await Promise.resolve(this.formatter.handlePong(obj));
-                    if (isPong) {
-                        isHandled = true;
-                    }
-                } else {
-                    // If handlePong is null, then any message counts as a pong,
-                    // but we don't eat the message.
-                    isPong = true;
-                }
-
-                if (this._lastSentPing != null) {
-                    if (isPong) {
-                        // If this is a pong then clear the pong timer.
-                        this._lastSentPing.clearTimeout();
-                        this._lastSentPing = null;
-                    } else {
-                        // If this is NOT a pong then just extend the response timer, if any
-                        WebSockHop.log("info", "Non-pong received during pong response period, extending delay...");
-                        this._startPingMessageTimeout(this._lastSentPing);
-                    }
-                }
-            }
-
-            if (isPong) {
-                if (pongId > 0) {
-                    WebSockHop.log("info", "< PONG [" + pongId + "]");
-                } else {
-                    WebSockHop.log("info", "< PONG");
-                }
-                this._resetPingTimer();
-            }
-            if (!isHandled && isFunction(this.formatter.handlePing)) {
-                const isPing = await Promise.resolve(this.formatter.handlePing(obj));
-                if (isPing) {
-                    WebSockHop.log("info", "Received PING message, handled.");
-                    isHandled = true;
-                }
+            if (handler != null) {
+                await Promise.resolve(handler.callback(obj));
+                isHandled = true;
             }
         }
+
         if (!isHandled) {
             await this._raiseEvent("message", obj);
         }
     }
+
     async _dispatchErrorMessage(id, error) {
         if (this.formatter != null) {
             const handler = this.formatter.getHandlerForResponse({id});
